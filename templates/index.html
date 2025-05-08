@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Explorer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>File Explorer</h1>
+            <div class="toolbar">
+                <form action="{{ url_for('search') }}" method="GET" class="search-form">
+                    <input type="text" name="q" placeholder="Search files..." class="search-input">
+                    <button type="submit" class="search-button">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </form>
+                <label for="file-upload" class="upload-btn">
+                    <i class="fas fa-upload"></i> Upload
+                </label>
+                <input type="file" id="file-upload" style="display: none">
+            </div>
+            <div class="breadcrumb">
+                <a href="{{ url_for('browse') }}"><i class="fas fa-home"></i></a>
+                {% set path_parts = current_path.split('/') %}
+                {% set accumulated_path = '' %}
+                {% for part in path_parts if part %}
+                    {% set accumulated_path = accumulated_path + '/' + part %}
+                    / <a href="{{ url_for('browse', path=accumulated_path[1:]) }}">{{ part }}</a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="file-list" id="file-list">
+            {% if current_path %}
+            <div class="item" data-path="{{ parent_path }}">
+                <i class="fas fa-level-up-alt"></i>
+                <span class="name">...</span>
+                <span class="size"></span>
+                <span class="modified"></span>
+            </div>
+            {% endif %}
+
+            {% for file in files %}
+            <div class="item" data-path="{{ (current_path + '/' + file.name).lstrip('/') }}" data-type="{{ 'folder' if file.is_dir else 'file' }}">
+                <i class="fas {{ 'fa-folder' if file.is_dir else 'fa-file' }}"></i>
+                <span class="name">{{ file.name }}</span>
+                <span class="size">{{ file.size }}</span>
+                <span class="modified">{{ file.modified }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="context-menu" id="context-menu">
+        <div class="menu-item rename">
+            <i class="fas fa-edit"></i> Rename
+        </div>
+        <div class="menu-item delete">
+            <i class="fas fa-trash"></i> Delete
+        </div>
+    </div>
+
+    <div class="modal" id="rename-modal">
+        <div class="modal-content">
+            <h2>Rename</h2>
+            <input type="text" id="new-name-input">
+            <div class="modal-buttons">
+                <button class="cancel-btn">Cancel</button>
+                <button class="confirm-btn">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // File/Folder click handler
+        document.querySelectorAll('.item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (!e.target.closest('.context-menu') && e.button !== 2) {
+                    window.location.href = `/browse/${item.dataset.path}`;
+                }
+            });
+        });
+
+        // Context menu
+        let selectedItem = null;
+        const contextMenu = document.getElementById('context-menu');
+        const renameModal = document.getElementById('rename-modal');
+
+        document.addEventListener('contextmenu', (e) => {
+            const item = e.target.closest('.item');
+            if (item) {
+                e.preventDefault();
+                selectedItem = item;
+                contextMenu.style.display = 'block';
+                contextMenu.style.left = e.pageX + 'px';
+                contextMenu.style.top = e.pageY + 'px';
+            }
+        });
+
+        document.addEventListener('click', () => {
+            contextMenu.style.display = 'none';
+        });
+
+        // Rename functionality
+        document.querySelector('.menu-item.rename').addEventListener('click', () => {
+            if (selectedItem) {
+                const nameElement = selectedItem.querySelector('.name');
+                document.getElementById('new-name-input').value = nameElement.textContent;
+                renameModal.style.display = 'block';
+            }
+        });
+
+        document.querySelector('.confirm-btn').addEventListener('click', async () => {
+            const newName = document.getElementById('new-name-input').value;
+            const path = selectedItem.dataset.path;
+
+            const response = await fetch('/rename', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `path=${encodeURIComponent(path)}&new_name=${encodeURIComponent(newName)}`
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                window.location.reload();
+            } else {
+                alert('Error: ' + result.error);
+            }
+        });
+
+        // Delete functionality
+        document.querySelector('.menu-item.delete').addEventListener('click', async () => {
+            if (selectedItem && confirm('Are you sure you want to delete this item?')) {
+                const path = selectedItem.dataset.path;
+                
+                const response = await fetch('/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `path=${encodeURIComponent(path)}`
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            }
+        });
+
+        // File upload
+        document.getElementById('file-upload').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('path', '{{ current_path }}');
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            }
+        });
+
+        // Modal close button
+        document.querySelector('.cancel-btn').addEventListener('click', () => {
+            renameModal.style.display = 'none';
+        });
+    </script>
+</body>
+</html>

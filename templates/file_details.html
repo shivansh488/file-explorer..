@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Details - {{ file_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>File Details</h1>
+            <div class="breadcrumb">
+                <a href="{{ url_for('browse') }}"><i class="fas fa-home"></i></a>
+                {% set path_parts = file_path.split('/') %}
+                {% set accumulated_path = '' %}
+                {% for part in path_parts[:-1] if part %}
+                    {% set accumulated_path = accumulated_path + '/' + part %}
+                    / <a href="{{ url_for('browse', path=accumulated_path[1:]) }}">{{ part }}</a>
+                {% endfor %}
+                / <span class="current">{{ file_name }}</span>
+            </div>
+        </div>
+
+        <div class="file-details">
+            <div class="file-header">
+                <i class="fas fa-file"></i>
+                <h2>{{ file_name }}</h2>
+            </div>
+
+            <!-- Media Preview Section -->
+            {% if details.type %}
+            <div class="media-preview">
+                {% if details.type.startswith('image/') %}
+                    <img src="{{ url_for('browse', path=file_path) }}" alt="{{ file_name }}" class="preview-image">
+                {% elif details.type.startswith('video/') %}
+                    <video controls class="preview-video">
+                        <source src="{{ url_for('browse', path=file_path) }}" type="{{ details.type }}">
+                        Your browser does not support the video tag.
+                    </video>
+                {% elif details.type.startswith('audio/') %}
+                    <div class="audio-player">
+                        <i class="fas fa-music"></i>
+                        <audio controls>
+                            <source src="{{ url_for('browse', path=file_path) }}" type="{{ details.type }}">
+                            Your browser does not support the audio tag.
+                        </audio>
+                    </div>
+                {% elif '.pdf' in file_name.lower() %}
+                    <iframe src="{{ url_for('browse', path=file_path) }}" class="pdf-viewer"></iframe>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="details-grid">
+                <div class="detail-item">
+                    <div class="detail-label">
+                        <i class="fas fa-weight"></i> Size
+                    </div>
+                    <div class="detail-value">{{ details.size }}</div>
+                </div>
+
+                <div class="detail-item">
+                    <div class="detail-label">
+                        <i class="fas fa-clock"></i> Modified
+                    </div>
+                    <div class="detail-value">{{ details.modified }}</div>
+                </div>
+
+                <div class="detail-item">
+                    <div class="detail-label">
+                        <i class="fas fa-calendar"></i> Created
+                    </div>
+                    <div class="detail-value">{{ details.created }}</div>
+                </div>
+
+                <div class="detail-item">
+                    <div class="detail-label">
+                        <i class="fas fa-file-alt"></i> Type
+                    </div>
+                    <div class="detail-value">{{ details.type }}</div>
+                </div>
+            </div>
+
+            <div class="file-actions">
+                <button class="action-btn rename-btn" onclick="showRenameModal()">
+                    <i class="fas fa-edit"></i> Rename
+                </button>
+                <button class="action-btn delete-btn" onclick="deleteFile()">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <a href="{{ url_for('browse', path=file_path) }}" class="action-btn download-btn" download>
+                    <i class="fas fa-download"></i> Download
+                </a>
+                {% if details.type and details.type.startswith('image/') %}
+                <button class="action-btn fullscreen-btn" onclick="toggleFullscreen()">
+                    <i class="fas fa-expand"></i> Fullscreen
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="rename-modal">
+        <div class="modal-content">
+            <h2>Rename File</h2>
+            <input type="text" id="new-name-input" value="{{ file_name }}">
+            <div class="modal-buttons">
+                <button class="cancel-btn" onclick="hideRenameModal()">Cancel</button>
+                <button class="confirm-btn" onclick="renameFile()">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Image Modal -->
+    <div class="modal fullscreen-modal" id="fullscreen-modal" onclick="closeFullscreen()">
+        <img id="fullscreen-image" src="" alt="">
+        <button class="close-btn" onclick="closeFullscreen()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <script>
+        function showRenameModal() {
+            document.getElementById('rename-modal').style.display = 'block';
+        }
+
+        function hideRenameModal() {
+            document.getElementById('rename-modal').style.display = 'none';
+        }
+
+        async function renameFile() {
+            const newName = document.getElementById('new-name-input').value;
+            const response = await fetch('/rename', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `path={{ file_path }}&new_name=${encodeURIComponent(newName)}`
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                window.location.href = `/browse/${encodeURIComponent(newName)}`;
+            } else {
+                alert('Error: ' + result.error);
+            }
+        }
+
+        async function deleteFile() {
+            if (confirm('Are you sure you want to delete this file?')) {
+                const response = await fetch('/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `path={{ file_path }}`
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    window.location.href = `/browse/{{ '/'.join(file_path.split('/')[:-1]) }}`;
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            }
+        }
+
+        // Fullscreen image functionality
+        function toggleFullscreen() {
+            const modal = document.getElementById('fullscreen-modal');
+            const img = document.getElementById('fullscreen-image');
+            img.src = "{{ url_for('browse', path=file_path) }}";
+            modal.style.display = 'flex';
+        }
+
+        function closeFullscreen() {
+            document.getElementById('fullscreen-modal').style.display = 'none';
+        }
+
+        // Close fullscreen on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>

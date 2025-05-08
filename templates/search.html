@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Explorer - Search</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Search Results</h1>
+            <div class="toolbar">
+                <form action="{{ url_for('search') }}" method="GET" class="search-form">
+                    <input type="text" name="q" placeholder="Search files..." class="search-input" value="{{ query if query else '' }}">
+                    <button type="submit" class="search-button">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </form>
+                <a href="{{ url_for('browse') }}" class="home-btn">
+                    <i class="fas fa-home"></i> Home
+                </a>
+            </div>
+            {% if query %}
+            <div class="search-info">
+                Showing results for: "{{ query }}"
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="search-results">
+            {% if results %}
+                {% for item in results %}
+                <div class="search-item" onclick="window.location.href='{{ url_for('browse', path=item.path) }}'">
+                    <div class="item-icon">
+                        <i class="fas {{ 'fa-folder' if item.is_dir else 'fa-file' }}"></i>
+                    </div>
+                    <div class="item-details">
+                        <div class="item-name">{{ item.name }}</div>
+                        <div class="item-path">{{ item.path }}</div>
+                    </div>
+                    <div class="item-actions">
+                        <i class="fas fa-chevron-right"></i>
+                    </div>
+                </div>
+                {% endfor %}
+            {% elif results is not none %}
+                <div class="no-results">
+                    <i class="fas fa-search"></i>
+                    <p>No files or folders found matching "{{ query }}"</p>
+                </div>
+            {% else %}
+                <div class="search-placeholder">
+                    <i class="fas fa-search"></i>
+                    <p>Enter a search term to find files and folders</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Highlight matching text in search results
+        if ('{{ query }}') {
+            const query = '{{ query }}'.toLowerCase();
+            document.querySelectorAll('.item-name').forEach(element => {
+                const text = element.textContent;
+                const index = text.toLowerCase().indexOf(query);
+                if (index >= 0) {
+                    element.innerHTML = text.substring(0, index) +
+                        '<span class="highlight">' + 
+                        text.substring(index, index + query.length) +
+                        '</span>' +
+                        text.substring(index + query.length);
+                }
+            });
+        }
+
+        // Make entire search result item clickable
+        document.querySelectorAll('.search-item').forEach(item => {
+            item.style.cursor = 'pointer';
+        });
+    </script>
+</body>
+</html>
